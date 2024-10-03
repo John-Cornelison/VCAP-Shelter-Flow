@@ -1,0 +1,295 @@
+---
+title: "Shelter Flow Viz Analysis"
+author: "VCAP"
+date: "2024-09-23"
+output: word_document
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, warning = FALSE, echo = FALSE}
+#libraries
+library(tidyverse)
+library(ggalluvial)
+library(kableExtra)
+library(readr)
+
+setwd("C:/Users/john/Documents/GitHub_Data/VCAP-Shelter-Flow-Data")
+
+utah_final_csv <- read_csv("final_utah_dat.csv")
+utah_final_rds <- readRDS("final_utah_dat.rds")
+
+
+```
+
+
+```{r, echo = FALSE, warning = FALSE}
+
+#final data prep
+
+# turn data to quintiles or quartile
+numToQuintile <- function(x,n=5){
+  if(n==5){
+    return (
+      case_when(
+        x>=0 & x<=0.2 ~ 1,
+        x>0.2 & x<=0.4 ~ 2,
+        x>0.4 & x<=0.6 ~ 3,
+        x>0.6 & x<=0.8 ~ 4,
+        x>0.8 & x<=1 ~ 5
+      ))
+  }
+  if(n==4){
+    return (
+      case_when(
+        x>=0 & x<=0.25 ~ 1,
+        x>0.25 & x<=0.5 ~ 2,
+        x>0.5 & x<=0.75 ~ 3,
+        x>0.75 & x<=1 ~ 4
+      ))
+  }
+}
+
+# svi names to theme
+svi_theme_names <- c(
+  'RPL_THEME1' = 'Socioeconomic Status',
+  'RPL_THEME2' = 'Household Characteristics',
+  'RPL_THEME3' = 'Racial & Ethnic Minority Status',
+  'RPL_THEME4' = 'Housing Type & Transportation',
+  'RPL_THEMES' = 'SVI Overall Ranking'
+)
+
+animal_adoptions_SVI <- utah_final_rds %>%
+  rename("RPL_THEME1_INT" = "INT_RPL_THEME1",
+         "RPL_THEME2_INT" = "INT_RPL_THEME2",
+         "RPL_THEME3_INT" = "INT_RPL_THEME3",
+         "RPL_THEME4_INT" = "INT_RPL_THEME4",
+         "RPL_THEMES_INT" = "INT_RPL_THEMES") %>% 
+  rename("RPL_THEME1_OUT" = "OUT_RPL_THEME1",
+         "RPL_THEME2_OUT" = "OUT_RPL_THEME2",
+         "RPL_THEME3_OUT" = "OUT_RPL_THEME3",
+         "RPL_THEME4_OUT" = "OUT_RPL_THEME4",
+         "RPL_THEMES_OUT" = "OUT_RPL_THEMES")
+
+intake_census_tracts <- animal_adoptions_SVI %>%
+  select(intake_census_tract, RPL_THEME1_INT, RPL_THEME2_INT, RPL_THEME3_INT, RPL_THEME4_INT, RPL_THEMES_INT) %>% 
+  rename("GEOID" = "intake_census_tract",
+         "RPL_THEME1" = "RPL_THEME1_INT",
+         "RPL_THEME2" = "RPL_THEME2_INT",
+         "RPL_THEME3" = "RPL_THEME3_INT",
+         "RPL_THEME4" = "RPL_THEME4_INT",
+         "RPL_THEMES" = "RPL_THEMES_INT")
+
+outcome_census_tracts <- animal_adoptions_SVI %>% 
+  select(outcome_census_tract, RPL_THEME1_OUT, RPL_THEME2_OUT, RPL_THEME3_OUT, RPL_THEME4_OUT, RPL_THEMES_OUT) %>% 
+  rename("GEOID" = "outcome_census_tract",
+         "RPL_THEME1" = "RPL_THEME1_OUT",
+         "RPL_THEME2" = "RPL_THEME2_OUT",
+         "RPL_THEME3" = "RPL_THEME3_OUT",
+         "RPL_THEME4" = "RPL_THEME4_OUT",
+         "RPL_THEMES" = "RPL_THEMES_OUT")
+
+SVI_breakdown <-  rbind(intake_census_tracts, outcome_census_tracts) %>% 
+  distinct(GEOID, .keep_all = TRUE)
+  
+
+```
+
+
+**Figure 1.** SVI Quintile distribution at the Census Tract level
+```{r, echo = FALSE, warning = FALSE, fig.width=9, fig.height=4, dpi=400}
+
+SVI_breakdown %>%
+  mutate(across(starts_with('RPL'), function(x) numToQuintile(x))) %>%  # SVIs to Qrtiles
+  select(GEOID, starts_with('RPL')) %>%
+  pivot_longer(-GEOID, names_to = 'svi_group', values_to = 'quintile') %>%
+  mutate(svi_group = svi_theme_names[svi_group],
+         quintile = as.character(quintile)) %>%
+  drop_na() %>% 
+  ggplot(aes(x=svi_group, fill=quintile)) +
+  geom_bar(position = "fill") +
+  labs(y='Percent', x='SVI Theme', fill="Quintile", 
+       title=sprintf('Breakdown of %s SVI %s Rankings', "Utah Shelter","Quintile"))+
+  coord_flip()+
+  scale_fill_viridis_d(option = "plasma", direction = 1, alpha = 0.6) +
+  theme(axis.text.y = element_text(size=12),
+        legend.position = "top")+
+  #theme(legend.position = "none")+
+  scale_y_continuous(labels = scales::percent) +
+  geom_text(
+    aes(label=paste0(round(100*signif(after_stat(count) / tapply(after_stat(count), after_stat(x), sum)[as.character(after_stat(x))], digits=3),1),'%')),
+    stat="count",
+    position=position_fill(vjust=0.5))
+
+
+```
+
+
+## TITLE 1
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur vehicula eros vitae massa scelerisque, nec dictum elit accumsan. Vivamus euismod leo eu dui vulputate, quis vehicula lacus fermentum. Praesent facilisis, sapien in sollicitudin varius, nunc nisl dictum justo, non bibendum orci justo at nulla. Donec viverra sodales elit, sit amet dapibus nisi malesuada non. Maecenas cursus orci in feugiat pretium. Cras eget mauris sem. Quisque malesuada mauris vel augue tristique, at vehicula leo convallis. Nulla facilisi. Phasellus dictum urna ac dui fermentum, ut tristique nisl tincidunt. Sed aliquam nibh id mauris blandit, eget interdum nulla fringilla.
+
+**Figure 2.** Flow of animals from intake to adoption by SVI quintile.
+```{r, warning=FALSE, echo=FALSE, fig.width = 10, fig.height=7, dpi=400}
+
+
+animal_adoptions_SVI %>% 
+  mutate(across(starts_with('RPL'), function(x) numToQuintile(x))) %>%  # SVIs to Qrtiles
+  count(RPL_THEMES_INT, RPL_THEMES_OUT) %>%
+  mutate(RPL_THEMES_INT=factor(RPL_THEMES_INT)) %>% #, labels = c("1", "2", "3", "4","5"))) %>%
+  mutate(RPL_THEMES_OUT=factor(RPL_THEMES_OUT)) %>% # , labels = c("1", "2", "3", "4","5"))) %>%
+  # viz
+  ggplot(aes(axis1 = RPL_THEMES_INT, axis2 = RPL_THEMES_OUT, y = n)) +
+  geom_alluvium(aes(fill = RPL_THEMES_INT) , curve_type = "quintic") +
+  geom_stratum(alpha=0.3) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), nudge_x=-0.04) +
+  scale_x_discrete(expand = c(.1, .1), limits = c(sprintf("Intake SVI %s","Quintile"), sprintf("Outcome SVI %s","Quintile")))+
+  theme(axis.text.x = element_text(size=14))+
+  scale_fill_viridis_d(option = "plasma", direction = 1) +
+  scale_y_continuous(labels = NULL, breaks = NULL) + labs(y = NULL)+
+  geom_text(stat = "stratum", aes(label = paste0('(',scales::percent(after_stat(prop),accuracy = .1),')')),
+            nudge_x = 0.03)+
+  theme(legend.position = "none")
+  
+
+```
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur vehicula eros vitae massa scelerisque, nec dictum elit accumsan. Vivamus euismod leo eu dui vulputate, quis vehicula lacus fermentum. Praesent facilisis, sapien in sollicitudin varius, nunc nisl dictum justo, non bibendum orci justo at nulla. Donec viverra sodales elit, sit amet dapibus nisi malesuada non. Maecenas cursus orci in feugiat pretium. Cras eget mauris sem. Quisque malesuada mauris vel augue tristique, at vehicula leo convallis. Nulla facilisi. Phasellus dictum urna ac dui fermentum, ut tristique nisl tincidunt. Sed aliquam nibh id mauris blandit, eget interdum nulla fringilla.
+
+
+## TITLE 2
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur vehicula eros vitae massa scelerisque, nec dictum elit accumsan. Vivamus euismod leo eu dui vulputate, quis vehicula lacus fermentum. Praesent facilisis, sapien in sollicitudin varius, nunc nisl dictum justo, non bibendum orci justo at nulla. Donec viverra sodales elit, sit amet dapibus nisi malesuada non. Maecenas cursus orci in feugiat pretium. Cras eget mauris sem. Quisque malesuada mauris vel augue tristique, at vehicula leo convallis. Nulla facilisi. Phasellus dictum urna ac dui fermentum, ut tristique nisl tincidunt. Sed aliquam nibh id mauris blandit, eget interdum nulla fringilla.
+
+**Figure 3.** Flow of animals from intake to adoption by SVI quintile, divided by intake type
+
+```{r, echo = FALSE, warning = FALSE, fig.width = 12, fig.height=7, fig.align='center', dpi=400}
+
+animal_adoptions_SVI %>%
+  #mutate(src_intake_type=ifelse(src_intake_type=='Return','Owner/Guardian Surrender',src_intake_type)) %>%
+  #filter(src_intake_type %in% c('Owner/Guardian Surrender','Stray','Seized / Custody')) %>%
+  #  ***intake plus species combo for sue
+  #mutate(src_intake_type=paste(species,src_intake_type)) %>%
+  #  ***dog size filters
+  #filter(species=='Dog') %>% mutate(size_group=ifelse(size_group=='Extra Large','Large',size_group)) %>% 
+  #filter(size_group!="") %>%
+  #  age 
+  # mutate(age_group=case_when(
+  #   age_group=='Unknown' ~ 'Adult',
+  #   age_group=='Senior' ~ 'Adult',
+  #   age_group=='Neonate' ~ 'Youth',
+  #   age_group=='Juvenile' ~ 'Youth',
+  #   TRUE ~ age_group
+  # )) %>% 
+  #filter(age_group=='Adult') %>% # for the figure of size without Youths
+  #mutate(age_group = paste(species, age_group)) %>% #count(age_group)
+  mutate(across(starts_with('RPL'), function(x) numToQuintile(x))) %>%  # SVIs to Qrtiles
+  # ADD N TO FACET AND CHOOSE FACET VARIABLE (twice)
+  group_by(`Intake Type`) %>% mutate(n_group=n()) %>% mutate(`Intake Type`=paste0(`Intake Type`,' (n = ',formatC(n_group, big.mark = ','),')')) %>% ungroup() %>%
+  count(`Intake Type`, RPL_THEMES_INT, RPL_THEMES_OUT) %>%
+  mutate(RPL_THEMES_INT=factor(RPL_THEMES_INT)) %>% #, labels = c("1", "2", "3", "4","5"))) %>%
+  mutate(RPL_THEMES_OUT=factor(RPL_THEMES_OUT)) %>% #, labels = c("1", "2", "3", "4","5"))) %>%
+  # viz
+  ggplot(aes(axis1 = RPL_THEMES_INT, axis2 = RPL_THEMES_OUT, y = n)) +
+  geom_alluvium(aes(fill = RPL_THEMES_INT) , curve_type = "quintic") +
+  geom_stratum(alpha=0.3) +
+  # CHOOSE FACET HERE TOO
+  facet_wrap(~`Intake Type`, scales='free_y')+   # FACET
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)),nudge_x=-0.05) +
+  geom_text(stat = "stratum", aes(label = paste0('(',scales::percent(after_stat(prop),accuracy = .1),')')),
+            nudge_x = 0.04)+
+  scale_x_discrete(expand = c(.1, .1), limits = c(sprintf("Intake SVI %s","Quintile"), sprintf("Outcome SVI %s","Quintile")))+
+  theme(axis.text.x = element_text(size=14))+
+  scale_fill_viridis_d(option = "plasma", direction = 1) +
+  scale_y_continuous(labels = NULL, breaks = NULL) + labs(y = NULL)+
+  theme(strip.text = element_text(size=12))+
+  theme(legend.position = "none")
+
+
+```
+
+
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur vehicula eros vitae massa scelerisque, nec dictum elit accumsan. Vivamus euismod leo eu dui vulputate, quis vehicula lacus fermentum. Praesent facilisis, sapien in sollicitudin varius, nunc nisl dictum justo, non bibendum orci justo at nulla. Donec viverra sodales elit, sit amet dapibus nisi malesuada non. Maecenas cursus orci in feugiat pretium. Cras eget mauris sem. Quisque malesuada mauris vel augue tristique, at vehicula leo convallis. Nulla facilisi. Phasellus dictum urna ac dui fermentum, ut tristique nisl tincidunt. Sed aliquam nibh id mauris blandit, eget interdum nulla fringilla.
+
+## TITLE 3
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur vehicula eros vitae massa scelerisque, nec dictum elit accumsan. Vivamus euismod leo eu dui vulputate, quis vehicula lacus fermentum. Praesent facilisis, sapien in sollicitudin varius, nunc nisl dictum justo, non bibendum orci justo at nulla. Donec viverra sodales elit, sit amet dapibus nisi malesuada non. Maecenas cursus orci in feugiat pretium. Cras eget mauris sem. Quisque malesuada mauris vel augue tristique, at vehicula leo convallis. Nulla facilisi. Phasellus dictum urna ac dui fermentum, ut tristique nisl tincidunt. Sed aliquam nibh id mauris blandit, eget interdum nulla fringilla.
+
+**Figure 4.** Flow of animals from intake to adoption by SVI quintile, rotating SVI themes
+
+```{r, warning = FALSE, echo = FALSE, fig.width = 10, fig.height=8, dpi=400}
+
+animal_adoptions_SVI %>%
+  mutate(id = row_number()) %>% 
+  mutate(across(starts_with('RPL'), function(x) numToQuintile(x))) %>%  # SVIs to Qrtiles
+  select(id, matches('RPL_THEME[1-4].*')) %>%
+  pivot_longer(-id, names_to=c('which_svi','INT_OUT'),names_pattern = '(.*)_(.*)',
+               values_to = 'quintile') %>%
+  pivot_wider(id_cols=c(id, which_svi),
+              names_from = 'INT_OUT', values_from = 'quintile') %>%
+  count(which_svi, RPL_THEMES_INT=`INT`,RPL_THEMES_OUT=OUT) %>% # confirm it works filter(which_svi=='RPL_THEME1') %>% pull(n) %>% sum()
+  mutate(which_svi = svi_theme_names[which_svi]) %>%
+  mutate(RPL_THEMES_INT=factor(RPL_THEMES_INT)) %>% #, labels = c("1", "2", "3", "4"))) %>%
+  mutate(RPL_THEMES_OUT=factor(RPL_THEMES_OUT)) %>% # , labels = c("1", "2", "3", "4"))) %>%
+  # viz
+  ggplot(aes(axis1 = RPL_THEMES_INT, axis2 = RPL_THEMES_OUT, y = n)) +
+  geom_alluvium(aes(fill = RPL_THEMES_INT) , curve_type = "quintic") +
+  geom_stratum(alpha=0.3) +
+  facet_wrap(~which_svi, scales='free_y')+   # FACET
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)),nudge_x=-0.05) +
+  geom_text(stat = "stratum", aes(label = paste0('(',scales::percent(after_stat(prop),accuracy = .1),')')),
+            nudge_x = 0.04)+
+  scale_x_discrete(expand = c(.1, .1), limits = c(sprintf("Intake SVI %s","Quintile"), sprintf("Outcome SVI %s","Quintile")))+
+  theme(axis.text.x = element_text(size=11))+
+  theme(strip.text = element_text(size=14))+
+  scale_fill_viridis_d(option = "plasma", direction = 1) +
+  scale_y_continuous(labels = NULL, breaks = NULL) + labs(y = NULL)+
+  theme(legend.position = "none")
+
+```
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur vehicula eros vitae massa scelerisque, nec dictum elit accumsan. Vivamus euismod leo eu dui vulputate, quis vehicula lacus fermentum. Praesent facilisis, sapien in sollicitudin varius, nunc nisl dictum justo, non bibendum orci justo at nulla. Donec viverra sodales elit, sit amet dapibus nisi malesuada non. Maecenas cursus orci in feugiat pretium. Cras eget mauris sem. Quisque malesuada mauris vel augue tristique, at vehicula leo convallis. Nulla facilisi. Phasellus dictum urna ac dui fermentum, ut tristique nisl tincidunt. Sed aliquam nibh id mauris blandit, eget interdum nulla fringilla.
+
+
+## TITLE 4
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur vehicula eros vitae massa scelerisque, nec dictum elit accumsan. Vivamus euismod leo eu dui vulputate, quis vehicula lacus fermentum. Praesent facilisis, sapien in sollicitudin varius, nunc nisl dictum justo, non bibendum orci justo at nulla. Donec viverra sodales elit, sit amet dapibus nisi malesuada non. Maecenas cursus orci in feugiat pretium. Cras eget mauris sem. Quisque malesuada mauris vel augue tristique, at vehicula leo convallis. Nulla facilisi. Phasellus dictum urna ac dui fermentum, ut tristique nisl tincidunt. Sed aliquam nibh id mauris blandit, eget interdum nulla fringilla.
+
+**Figure 5.** Flow of animals from intake to adoption by SVI quintile, divided by age and species
+
+```{r, echo = FALSE, warning = FALSE, fig.width = 10, fig.height = 8, dpi=400}
+
+animal_adoptions_SVI %>%
+  #  age 
+  mutate(age_group = paste(Species, `Age Group at Outcome`)) %>% #count(age_group)
+  mutate(across(starts_with('RPL'), function(x) numToQuintile(x))) %>%  # SVIs to Qrtiles
+  # ADD N TO FACET AND CHOOSE FACET VARIABLE (paste twice)
+  group_by(age_group) %>% mutate(n_group=n()) %>% mutate(age_group=paste0(age_group,' (n = ',formatC(n_group, big.mark = ','),')')) %>% ungroup() %>%
+  count(age_group, RPL_THEMES_INT, RPL_THEMES_OUT) %>%
+  mutate(RPL_THEMES_INT=factor(RPL_THEMES_INT)) %>% #, labels = c("1", "2", "3", "4","5"))) %>%
+  mutate(RPL_THEMES_OUT=factor(RPL_THEMES_OUT)) %>% #, labels = c("1", "2", "3", "4","5"))) %>%
+  # viz
+  ggplot(aes(axis1 = RPL_THEMES_INT, axis2 = RPL_THEMES_OUT, y = n)) +
+  geom_alluvium(aes(fill = RPL_THEMES_INT) , curve_type = "quintic") +
+  geom_stratum(alpha=0.3) +
+  # CHOOSE FACET HERE TOO
+  facet_wrap(~age_group, scales='free_y')+   # FACET
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)),nudge_x=-0.05) +
+  geom_text(stat = "stratum", aes(label = paste0('(',scales::percent(after_stat(prop),accuracy = .1),')')),
+            nudge_x = 0.04)+
+  scale_x_discrete(expand = c(.1, .1), limits = c(sprintf("Intake SVI %s","Quintile"), sprintf("Outcome SVI %s","Quintile")))+
+  theme(axis.text.x = element_text(size=11))+
+  scale_fill_viridis_d(option = "plasma", direction = 1) +
+  scale_y_continuous(labels = NULL, breaks = NULL) + labs(y = NULL)+
+  theme(strip.text = element_text(size=12))+
+  theme(legend.position = "none")
+
+
+```
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur vehicula eros vitae massa scelerisque, nec dictum elit accumsan. Vivamus euismod leo eu dui vulputate, quis vehicula lacus fermentum. Praesent facilisis, sapien in sollicitudin varius, nunc nisl dictum justo, non bibendum orci justo at nulla. Donec viverra sodales elit, sit amet dapibus nisi malesuada non. Maecenas cursus orci in feugiat pretium. Cras eget mauris sem. Quisque malesuada mauris vel augue tristique, at vehicula leo convallis. Nulla facilisi. Phasellus dictum urna ac dui fermentum, ut tristique nisl tincidunt. Sed aliquam nibh id mauris blandit, eget interdum nulla fringilla.
+
